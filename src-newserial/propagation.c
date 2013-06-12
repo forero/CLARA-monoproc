@@ -90,7 +90,7 @@ void PropagateAllSetup(void)
 
 }
 
-int PropagateStep(double *x, double *k_in_photon, double *r_travel, double a, double n_HI)
+int PropagateStep(double *x_in, double *x_out, double *k_in_x, double *k_in_y, double *k_in_z, double *r_travel, int *status, double a, double n_HI, int n_points) 
 /* Calculates: 
    1. new frequency 
    2. new propagation direction, 
@@ -100,18 +100,13 @@ int PropagateStep(double *x, double *k_in_photon, double *r_travel, double a, do
    At this point the frequency must be already the comoving one (not lab frame!)
    If the photon is absorbed by dust, then the status is set to -1;
 */
-
 {
-    double k_out_photon[3];
-    double u_atom[3];
     double lya_sigma;
     double tau;
-    double x_in, x_out;
     double r;
     double N;
     double a_in;
     int i;
-    int status;
     double HIInteractionProb; /*probability of interacting with HI*/
     double dust_sigma;
     double rand_interaction;
@@ -119,73 +114,54 @@ int PropagateStep(double *x, double *k_in_photon, double *r_travel, double a, do
     double nu_doppler;
     double g_recoil;
     double temperature;
-
+    int i_photon;
+    
+    /*Initalizations*/
     nu_doppler = Lya_nu_line_width_CGS/(2.0*a);
     temperature = (nu_doppler/CONSTANT_NU_DOPPLER)*(nu_doppler/CONSTANT_NU_DOPPLER)*10000.0;
-    HIInteractionProb = 1.0;
-    rand_absorption = 0.0;
-    /*get a random number to decide if the thing interact with HI*/
-    rand_interaction  = RandFloatUnit();
-
     g_recoil = PLANCK*nu_doppler/(2.0*BOLTZMANN*temperature);
 
-    status = ACTIVE;
-    /* some initializations */
-    x_in = *x;
-    N    = n_HI;
-    a_in = a;
-
-
-    /* basic status at the interacion point*/
-    lya_sigma  = LyaCrossSection(x_in, a_in);
-    tau        = LyaTau();
-    r          = tau/(lya_sigma*N); /*the distance is in cm*/
-
-    if(All.UseDust){
-	dust_sigma = PI*All.GrainSize*All.GrainSize;
-	All.NumberDensityDust = All.TauDust/(All.SlabLength*dust_sigma);
-	/*probability of interacting with HI*/
-	HIInteractionProb = 
-	  All.NumberDensityHI*lya_sigma/(All.NumberDensityHI*lya_sigma + All.NumberDensityDust*dust_sigma);
-/*	fprintf(stdout, "Interaction prob %e \n", HIInteractionProb);*/
-	/*get a random number to decide if the thing will be absorbed*/
-	rand_absorption = RandFloatUnit();
-	
-	/* The traveled distance is modifyed by the presence of dust*/
-	r          = tau/(lya_sigma*N + dust_sigma*All.NumberDensityDust); /*the distance is in cm*/
-    }
-
-    if(rand_interaction <= HIInteractionProb){
-
-	/* generate the atom velocity the comoving frame*/
-	RND_lyman_atom(&(u_atom[0]), &(u_atom[1]), &(u_atom[2]), 
-		       &(k_in_photon[0]), &(k_in_photon[1]), &(k_in_photon[2]), 
-		       &(k_out_photon[0]), &(k_out_photon[1]), &(k_out_photon[2]),
-		       x_in, a_in);
-
-
-	/*find the new frequency (in the observer system)*/
-	x_out = x_in - point_product(u_atom, k_in_photon) +
-	  point_product(u_atom, k_out_photon) +	  
-	  g_recoil * (point_product(k_in_photon, k_out_photon) - 1.0);
-
-    }else{
-	x_out = x_in;
-    }
-
-    for(i=0;i<3;i++){
-	k_in_photon[i] = k_out_photon[i];
-    }
-
-    *x = x_out;
-    *r_travel = r ;
-
-    if((rand_interaction > HIInteractionProb) && All.UseDust && (rand_absorption < All.DustAbsorptionProb)){
-	*r_travel = 0.0;
-	status = ABSORBED;
-    }
+    /* generates the atom velocity the comoving frame*/
+    RND_lyman_atom(k_in_x, k_in_y, k_in_z, x_out, a, g_recoil, n_points);
     
-    return status;
+    for(i_photon=0;i_photon<n_points;i_photon++){
+      if(status[i_photon]==ACTIVE){
+
+	HIInteractionProb = 1.0;
+	rand_absorption = 0.0;
+	
+	/*get a random number to decide if the thing interact with HI*/
+	rand_interaction  = RandFloatUnit();      
+	N    = n_HI;
+
+	/* basic status at the interacion point*/
+	lya_sigma  = LyaCrossSection(x_in[i_photon], a);
+	tau        = LyaTau();
+	r          = tau/(lya_sigma*N); /*the distance is in cm*/
+
+	if(All.UseDust){
+	  dust_sigma = PI*All.GrainSize*All.GrainSize;
+	  All.NumberDensityDust = All.TauDust/(All.SlabLength*dust_sigma);
+	  /*probability of interacting with HI*/
+	  HIInteractionProb = 
+	    All.NumberDensityHI*lya_sigma/(All.NumberDensityHI*lya_sigma + All.NumberDensityDust*dust_sigma);
+	  /*	fprintf(stdout, "Interaction prob %e \n", HIInteractionProb);*/
+	  /*get a random number to decide if the thing will be absorbed*/
+	  rand_absorption = RandFloatUnit();	  
+	  /* The traveled distance is modifyed by the presence of dust*/
+	  r          = tau/(lya_sigma*N + dust_sigma*All.NumberDensityDust); /*the distance is in cm*/
+	}
+
+	r_travel[i_photon] = r;
+
+	if((rand_interaction > HIInteractionProb) && All.UseDust && (rand_absorption < All.DustAbsorptionProb)){
+	  r_travel[i_photon] = 0.0;
+	  status[i_photon] = ABSORBED;
+	  x_out[i_photon] = x_in[i_photon];
+	}
+      }
+    }
+    return 0;
 }
 
 void PropagateGetBulkVel(double *BulkVel, double *Pos){
@@ -229,9 +205,20 @@ void PropagateLorentzFreqChange(double *x, double *Dir,
     *x  = *x + sign*lorentz_factor;
 }
 
+int count_active(int *status, int n_points){
+  int i, n_active;
+  n_active = 0;
+  for(i=0;i<n_points;i++){
+    if(status[i]==ACTIVE){
+      n_active++;
+    }
+  }
+  return n_active;
+}
+
 int PropagatePackage(double *PosX, double *PosY, double *PosZ, 
-		     double *DirX, double *DirY, double *DirZ, 
-		     double *x_in, int *status){
+		     double *DirX, double *DirY, double *DirZ, int *n_scatt, 
+		     double *x_in, int *status, int n_points){
     int i;
     double Pos[3];
     double Dir[3];
@@ -240,85 +227,163 @@ int PropagatePackage(double *PosX, double *PosY, double *PosZ,
     int n_iter;
     int stat;
     float last_x;
+    int  n_active;
+    int n_global_scatt;
+    double *x_aux_in;
+    double *x_aux_out;
+    double *r_travel_aux;
     n_iter=0;
+    n_global_scatt=0;
 
-    /*Make the initialization*/
-    Pos[0] = PosX[0];
-    Pos[1] = PosY[0];
-    Pos[2] = PosZ[0];
-    Dir[0] = DirX[0];
-    Dir[1] = DirY[0];
-    Dir[2] = DirZ[0];
+    /* auxiliary variables */
+    if(!(x_aux_in = malloc(sizeof(double) * n_points))){
+      fprintf(stderr, "Problem with x_aux allocation\n");
+      exit(1);
+    }
 
-    x = *x_in;
-    
+    if(!(x_aux_out = malloc(sizeof(double) * n_points))){
+      fprintf(stderr, "Problem with x_aux allocation\n");
+      exit(1);
+    }
+
+    if(!(r_travel_aux = malloc(sizeof(double) * n_points))){
+      fprintf(stderr, "Problem with r_travel_aux allocation\n");
+      exit(1);
+    }
 
 
-    stat = *status;
-    /*difuse the photon in space and frequency until it gets out*/
-    while(PropagateIsInside(Pos[0],Pos[1],Pos[2])&&(stat==ACTIVE)&&n_iter<MAX_ITER){
-      /* get the temperature at this point*/
-      PropagateGetTemperature(&temperature, Pos);
-      
-      /* get the number density at this point*/
+    /* count the number of active photons */
+    n_active = count_active(status, n_points);
+#ifdef DEBUG
+    fprintf(stdout, "Active photons: %d", n_active);
+    fflush(stdout);
+#endif
+
+
+
+    /* difuse the photon in space and frequency until it gets out */
+    while(n_active>0){
+
+      for(i=0;i<n_points;i++){
+	/*Make the initialization*/
+	Pos[0] = PosX[i];
+	Pos[1] = PosY[i];
+	Pos[2] = PosZ[i];
+	Dir[0] = DirX[i];
+	Dir[1] = DirY[i];
+	Dir[2] = DirZ[i];
+	stat = status[i];
+	if(stat==ACTIVE){
+	  x_aux_in[i] = x_in[i];    
+	  x_aux_out[i] = x_in[i];    
+	}else{
+	  x_aux_in[i] = 0.0;
+	  x_aux_out[i] = 0.0;
+	}
+	
+	/*If the photon is stil inside and active, update its direction of propagation and frequency 
+	  to  gas rest frame */
+	if(PropagateIsInside(Pos[0],Pos[1],Pos[2])&&(stat==ACTIVE)){
+	  /* get the temperature at this point*/
+	  PropagateGetTemperature(&temperature, Pos);
+	  
+	  /* get the number density at this point*/
+	  PropagateGetNumberDensity(&n_HI, Pos);
+	  
+	  /*get the bulk velocity of the fluid at this point*/
+	  PropagateGetBulkVel(BulkVel, Pos);
+	  
+	  /*Get the thermal velocity and doppler broadening*/
+	  nu_doppler = CONSTANT_NU_DOPPLER*sqrt(temperature/10000.0); /* in cm/s */
+	  a = Lya_nu_line_width_CGS/(2.0*nu_doppler);
+	  v_thermal = (nu_doppler/Lya_nu_center_CGS)*C_LIGHT;/*In cm/s*/
+	  
+	  /*change the value of the frequency to one comoving with the fluid*/
+	  PropagateLorentzFreqChange(&(x_aux_in[i]), Dir, BulkVel, v_thermal, -1); 
+	  
+	  /*change the direction of the photon to the fluid frame*/
+	  PropagateLorentzDirChange(&(Dir[0]), BulkVel, -1);
+	}
+	DirX[i] = Dir[0];
+	DirY[i] = Dir[1];
+	DirZ[i] = Dir[2];
+      }
+	  
       PropagateGetNumberDensity(&n_HI, Pos);
-      
-      /*get the bulk velocity of the fluid at this point*/
-      PropagateGetBulkVel(BulkVel, Pos);
-      
-      /*Get the thermal velocity and doppler broadening*/
+      PropagateGetTemperature(&temperature, Pos);
       nu_doppler = CONSTANT_NU_DOPPLER*sqrt(temperature/10000.0); /* in cm/s */
       a = Lya_nu_line_width_CGS/(2.0*nu_doppler);
       v_thermal = (nu_doppler/Lya_nu_center_CGS)*C_LIGHT;/*In cm/s*/
-      
-      /*change the value of the frequency to one comoving with the fluid*/
-      PropagateLorentzFreqChange(&x, Dir, BulkVel, v_thermal, -1); 
-            
-      /*change the direction of the photon to the fluid frame*/
-      PropagateLorentzDirChange(&(Dir[0]), BulkVel, -1);
-                  
-      /*--------------------------------------------------------------------------*/
-      /*Change the frequency and the Propagation direction, find the displacement*/	
-      stat = PropagateStep(&x, Dir, &r_travel, a, n_HI);	    	
-      /*--------------------------------------------------------------------------*/
-      
-      
-      /*Change the new direction to the lab frame value*/
-      PropagateLorentzDirChange(Dir, BulkVel, 1);
-      
-      /*Change the frequency comoving to the lab frame value*/
-      PropagateLorentzFreqChange(&x, Dir, BulkVel, v_thermal, 1); 
-      
-      
-      /*Update the position*/
-      for(i=0;i<3;i++){
-	Pos[i] += r_travel*Dir[i];	    
-      }
 
-      n_iter++;
-      last_x = x;
+      /*Change the frequency and the Propagation direction, find the displacement*/	
+      PropagateStep(x_aux_in, x_aux_out, DirX, DirY, DirZ, r_travel_aux, status, a, n_HI, n_points);	    	
+            
+      for(i=0;i<n_points;i++){
+	Pos[0] = PosX[i];
+	Pos[1] = PosY[i];
+	Pos[2] = PosZ[i];	
+	Dir[0] = DirX[i];
+	Dir[1] = DirY[i];
+	Dir[2] = DirZ[i];
+	stat = status[i];	
+
+	if(PropagateIsInside(Pos[0],Pos[1],Pos[2])&&(stat==ACTIVE)){
+	  /* get the temperature at this point*/
+	  PropagateGetTemperature(&temperature, Pos);
+	  
+	  /* get the number density at this point*/
+	  PropagateGetNumberDensity(&n_HI, Pos);
+	  
+	  /*get the bulk velocity of the fluid at this point*/
+	  PropagateGetBulkVel(BulkVel, Pos);
+
+	  /*Get the thermal velocity and doppler broadening*/
+	  nu_doppler = CONSTANT_NU_DOPPLER*sqrt(temperature/10000.0); /* in cm/s */
+	  a = Lya_nu_line_width_CGS/(2.0*nu_doppler);
+	  v_thermal = (nu_doppler/Lya_nu_center_CGS)*C_LIGHT;/*In cm/s*/
+	  
+	  /*Change the new direction to the lab frame value*/
+	  PropagateLorentzDirChange(Dir, BulkVel, 1);
+	  
+	  /*Change the frequency comoving to the lab frame value*/
+	  PropagateLorentzFreqChange(&(x_aux_out[i]), Dir, BulkVel, v_thermal, 1); 
+	  
+	  /*Update the position*/
+	  Pos[0] += r_travel_aux[i] * Dir[0];	    
+	  Pos[1] += r_travel_aux[i] * Dir[1];	    
+	  Pos[2] += r_travel_aux[i] * Dir[2];    
+	  n_scatt[i]++;
+
+	  /*update the final status of the photon, just to know if it was absorbed, or what*/
+	  if(!(PropagateIsInside(Pos[0],Pos[1],Pos[2]))){
+	    status[i] = OUT_OF_BOX;
+	  }
+
+	  PosX[i] = Pos[0];
+	  PosY[i] = Pos[1];
+	  PosZ[i] = Pos[2];
+	  DirX[i] = Dir[0];
+	  DirY[i] = Dir[1];
+	  DirZ[i] = Dir[2];	  
+	  x_in[i] = x_aux_out[i];
+	}
+
+	if(i==0){
+	  n_global_scatt++;
+	}
+      }
+      n_active = count_active(status, n_points);
+#ifdef DEBUG      
+      fprintf(stdout, "Active photons: %d, n_scatt %d \n", n_active, n_global_scatt);
+#endif
     }
-    
-    /*update the final status of the photon, just to know if it was absorbed, or what*/
-    if(stat==ACTIVE){
-      stat = OUT_OF_BOX;
-    }
-    if(n_iter>= MAX_ITER){
-      stat = SATURATED_ITERATIONS;
-    }
-    
-    /*Update the final values*/
-    PosX[0] = Pos[0];
-    PosY[0] = Pos[1];
-    PosZ[0] = Pos[2];
-    DirX[0] = Dir[0];
-    DirY[0] = Dir[1];
-    DirZ[0] = Dir[2];
-	
-    *x_in = x;
-    *status = stat;
-    return n_iter;
+
+    free(x_aux_in);
+    free(x_aux_out);
+    free(r_travel_aux);
+    return 0;    
 }
+
     
 void PropagateAll(void)
 {
@@ -327,7 +392,7 @@ void PropagateAll(void)
     lyman_RT_photons *Ph;
     int n_iter;
     char FileName[MAX_FILENAME_SIZE];
-
+    int status;
 
     /*update some geometrical values*/
     PropagateAllSetup();
@@ -355,13 +420,14 @@ void PropagateAll(void)
     }
     
     /*propagate each package*/
-    for(i=0;i<n_packages;i++){
-	Ph->ScatterHI[i] = 
-	  PropagatePackage(&(Ph->PosX[i]), &(Ph->PosY[i]), &(Ph->PosZ[i]),
-			   &(Ph->DirX[i]), &(Ph->DirY[i]), &(Ph->DirZ[i]),
-			   &(Ph->x_out[i]), &(Ph->Active[i]));	
-	fprintf(stdout, "Done package %d\n", i);
 
+    status = PropagatePackage(Ph->PosX, Ph->PosY, Ph->PosZ,
+			      Ph->DirX, Ph->DirY, Ph->DirZ,
+			      Ph->ScatterHI, Ph->x_out, Ph->Active, 
+			      n_packages);
+    
+
+    for(i=0;i<n_packages;i++){
 	if(All.OutputFinalList){
 	  sprintf(FileName, "%s/%s_out.proc.%d.ascii", All.OutputDir, All.OutputFile, ThisProc);
 	  AppendPhotonListAscii(FileName, Ph, i);    
@@ -371,37 +437,6 @@ void PropagateAll(void)
     /*free the memory*/
     PhotonFree(Ph);
 }
-
-void TestFirstScatter(double x, double a)
-{
-    double x_in;
-    double r_travel;
-    double k_in_photon[3];
-    double n_HI;
-    int status;
-    int i;
-    char FileName[MAX_FILENAME_SIZE];
-    FILE *out;
-
-    status = 0;
-    PropagateAllSetup();
-
-
-    sprintf(FileName, "%s/%s_FirstScatter.proc.%d", All.OutputDir, All.OutputTestFile, ThisProc);
-    if(!(out=fopen(FileName, "w"))){
-	fprintf(stderr, "TestFirstScatter problem opening file %s\n", FileName);
-	exit(0);
-    }
-    fprintf(out, "%d %e %e\n", N_POINTS_IN_TEST, x, a);
-    for(i=0;i<N_POINTS_IN_TEST;i++){
-	x_in = x;
-	n_HI = All.NumberDensityHI;
-	RND_spherical(&(k_in_photon[0]), &(k_in_photon[1]), &(k_in_photon[2]));    
-	status = PropagateStep(&x_in, &(k_in_photon[0]), &r_travel, a, n_HI);
-	fprintf(out, "%e\n", x_in);
-    }
-    fclose(out);
-} 
 
 void TestRND(void)
 {
@@ -437,10 +472,11 @@ void TestAll(void){
     if(All.TestParallelVelFast){
 	RND_lyman_parallel_vel_fast_test(All.Test_x,All.Test_a);
     }    
-
+    /*
     if(All.TestFirstScatter){
 	TestFirstScatter(All.Test_x, All.Test_a);
     }
+    */
 
     if(All.TestRND){
 	TestRND();

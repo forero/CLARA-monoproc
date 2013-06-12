@@ -234,8 +234,6 @@ void RND_lyman_perp_vel(double *u_1, double *u_2)
     double tmp2;
     double vel_1, vel_2;
 
-
-    
     tmp1 = RandFloatUnit();
     tmp2 = RandFloatUnit();
     vel_1 = sqrt(-log(tmp1))*cos(2.0*PI*tmp2);
@@ -249,12 +247,9 @@ void RND_lyman_perp_vel(double *u_1, double *u_2)
 
 
 
-void RND_lyman_atom(double *VelX, double *VelY, double *VelZ, 
-		    double *DirPhotonX, double *DirPhotonY, double *DirPhotonZ, 
-		    double *DirOutPhotonX, double *DirOutPhotonY, double *DirOutPhotonZ, 
-		    double x, double a)
-/* obtains a random velocity for the atom.
- the velocity is in units of the termal velocity.*/
+void RND_lyman_atom(double *DirPhotonX, double *DirPhotonY, double *DirPhotonZ, 
+		    double *x, double a, double g_recoil, int n_points)
+/* obtains a random velocity for the atom. the velocity is in units of the thermal velocity.*/
 {
     double LocalVel[3];
     double x_axis[3];
@@ -263,96 +258,105 @@ void RND_lyman_atom(double *VelX, double *VelY, double *VelZ,
     double rand_axis[3];
     double R_1, R_2, R_3, T, mu, iso;
     double x_corewing;
+    double x_out;
+    double Vel[3];
+    double k_in_photon[3];
+    double k_out_photon[3];
+    int i_photon;
+    int i;
 
+    for(i_photon=0;i_photon<n_points;i_photon++){
+      /*initialize k_in_photon*/
+      k_in_photon[0] = DirPhotonX[i_photon];
+      k_in_photon[1] = DirPhotonY[i_photon];
+      k_in_photon[2] = DirPhotonZ[i_photon];
 
-    /*get first the parallel velocity*/
-    LocalVel[2] = RND_lyman_parallel_vel(x,a);
-
-    /*get the perpendicular velocity*/
-    RND_lyman_perp_vel(&(LocalVel[0]), &(LocalVel[1]));
-
-    /*get the axis in the coordinate system of the atom, where 
-      the z direction is the propagation direction of the photon*/
-    z_axis[0] = *DirPhotonX;
-    z_axis[1] = *DirPhotonY;
-    z_axis[2] = *DirPhotonZ;
-
-    /*get another random vector*/
-    RND_spherical(&(rand_axis[0]), &(rand_axis[1]), &(rand_axis[2]));
-
-    /*make the cross product and get y_axis*/
-    cross_product(z_axis, rand_axis, y_axis);
-
-    /*make the cross product and get x_axis*/
-    cross_product(y_axis, z_axis, x_axis);
-
-    /*normalize the vectors*/
-    normalize(x_axis);
-    normalize(y_axis);
-    normalize(z_axis);
-
-    /*see if they are perpendicular*/
-    rand_axis[0] = point_product(x_axis, z_axis);
-    rand_axis[1] = point_product(x_axis, y_axis);
-    rand_axis[2] = point_product(y_axis, z_axis);
-    if(fabs(rand_axis[0]) + fabs(rand_axis[1])+ fabs(rand_axis[2])>1.0e-10){
+      /*get first the parallel velocity*/
+      LocalVel[2] = RND_lyman_parallel_vel(x[i_photon],a);
+      
+      /*get the perpendicular velocity*/
+      RND_lyman_perp_vel(&(LocalVel[0]), &(LocalVel[1]));
+      
+      /*get the axis in the coordinate system of the atom, where 
+	the z direction is the propagation direction of the photon*/
+      z_axis[0] = DirPhotonX[i_photon];
+      z_axis[1] = DirPhotonY[i_photon];
+      z_axis[2] = DirPhotonZ[i_photon];
+      
+      /*get another random vector*/
+      RND_spherical(&(rand_axis[0]), &(rand_axis[1]), &(rand_axis[2]));
+      
+      /*make the cross product and get y_axis*/
+      cross_product(z_axis, rand_axis, y_axis);
+      
+      /*make the cross product and get x_axis*/
+      cross_product(y_axis, z_axis, x_axis);
+      
+      /*normalize the vectors*/
+      normalize(x_axis);
+      normalize(y_axis);
+      normalize(z_axis);
+      
+      /*see if they are perpendicular*/
+      rand_axis[0] = point_product(x_axis, z_axis);
+      rand_axis[1] = point_product(x_axis, y_axis);
+      rand_axis[2] = point_product(y_axis, z_axis);
+      if((fabs(rand_axis[0]) + fabs(rand_axis[1])+ fabs(rand_axis[2]))>1.0e-10){
 	fprintf(stderr, "not orthogonal\n");
 	exit(1);
-    }
-
-    /*Now make the transformation into the coordinate frame of the lab*/
-    *VelX = LocalVel[0]*x_axis[0] + LocalVel[1]*y_axis[0] + LocalVel[2]*z_axis[0];
-    *VelY = LocalVel[0]*x_axis[1] + LocalVel[1]*y_axis[1] + LocalVel[2]*z_axis[1];
-    *VelZ = LocalVel[0]*x_axis[2] + LocalVel[1]*y_axis[2] + LocalVel[2]*z_axis[2];
-
-    /*
-    for(i=0;i<3;i++){
-	Vel[i] = LocalVel[0]*x_axis[i] + LocalVel[1]*y_axis[i] + LocalVel[2]*z_axis[i];
-    }
-    */
-
-    /*now get the outgoing direction of the photon, 
-      taking advantage of the vector basis I have just generated
-      Here I just take the value of dijkstra for the wing.
-    */
-
-    /*first define if it's in the core or not*/    
-
-    x_corewing = 1.59 - 0.60*log10(a) - 0.03*log10(a)*log10(a);
-
-    R_1 = RandFloatUnit();
-
-    iso = RandFloatUnit();
-    if(iso<(1.0/3.0)){/*isotropic*/
-      mu = (2.0*R_1 - 1.0);
-    }else{
-      if(fabs(x)<x_corewing){			/*In the core*/
-	/*now we make the decision if it's isotropic or not*/
-	T = (1.0/7.0)*(14.0  - 24.0*R_1  + sqrt(245.0 - 672.0*R_1 + 576*R_1*R_1));	  
-	mu = 1.0/(pow(T,1.0/3.0)) - pow(T, 1.0/3.0);	
-      }else{
-	T = 2.0 - 4.0*R_1  + sqrt(5.0 -16.0*R_1 + 16*R_1*R_1);
-	mu = 1.0/(pow(T,1.0/3.0)) - pow(T, 1.0/3.0);	
       }
-    }
+      
+      /*Now make the transformation into the coordinate frame of the lab*/
+      for(i=0;i<3;i++){
+	Vel[i] = LocalVel[0]*x_axis[i] + LocalVel[1]*y_axis[i] + LocalVel[2]*z_axis[i];
+      }
+      
+      
+      /*now get the outgoing direction of the photon, 
+	taking advantage of the vector basis I have just generated
+	Here I just take the value of dijkstra for the wing.
+      */
+      
+      /*first define if it's in the core or not*/    
+      
+      x_corewing = 1.59 - 0.60*log10(a) - 0.03*log10(a)*log10(a);
+      
+      R_1 = RandFloatUnit();
+      
+      iso = RandFloatUnit();
+      if(iso<(1.0/3.0)){/*isotropic*/
+	mu = (2.0*R_1 - 1.0);
+      }else{
+	if(fabs(x[i_photon])<x_corewing){			/*In the core*/
+	  /*now we make the decision if it's isotropic or not*/
+	  T = (1.0/7.0)*(14.0  - 24.0*R_1  + sqrt(245.0 - 672.0*R_1 + 576*R_1*R_1));	  
+	  mu = 1.0/(pow(T,1.0/3.0)) - pow(T, 1.0/3.0);	
+	}else{
+	  T = 2.0 - 4.0*R_1  + sqrt(5.0 -16.0*R_1 + 16*R_1*R_1);
+	  mu = 1.0/(pow(T,1.0/3.0)) - pow(T, 1.0/3.0);	
+	}
+      }
+      
+          
+      RND_pair(&R_1, &R_2);    
+      R_3 = R_1*R_1 + R_2*R_2;
 
+      for(i=0;i<3;i++){
+	k_out_photon[i] = 
+	  sqrt((1.0-(mu*mu))/R_3)*R_1*x_axis[i] + 
+	  sqrt((1.0-(mu*mu))/R_3)*R_2*y_axis[i] + 
+	  mu*z_axis[i];
+      }
 
-
+    /*find the new frequency (in the observer system)*/
+      x_out = x[i_photon] - point_product(Vel, k_in_photon) +
+	point_product(Vel, k_out_photon) +	  
+	g_recoil * (point_product(k_in_photon, k_out_photon) - 1.0);
     
-    RND_pair(&R_1, &R_2);    
-    R_3 = R_1*R_1 + R_2*R_2;
-
-    *DirOutPhotonX = 
-      sqrt((1.0-(mu*mu))/R_3)*R_1*x_axis[0] + 
-      sqrt((1.0-(mu*mu))/R_3)*R_2*y_axis[0] + 
-      mu*z_axis[0];
-    *DirOutPhotonY = 
-      sqrt((1.0-(mu*mu))/R_3)*R_1*x_axis[1] + 
-      sqrt((1.0-(mu*mu))/R_3)*R_2*y_axis[1] + 
-      mu*z_axis[1];
-    *DirOutPhotonZ = 
-      sqrt((1.0-(mu*mu))/R_3)*R_1*x_axis[2] + 
-      sqrt((1.0-(mu*mu))/R_3)*R_2*y_axis[2] + 
-      mu*z_axis[2];
-
+      /*updates frequency and direction of propagation*/
+      x[i_photon] = x_out;
+      DirPhotonX[i_photon] = k_out_photon[0];
+      DirPhotonY[i_photon] = k_out_photon[1];
+      DirPhotonZ[i_photon] = k_out_photon[2];
+    }
 }
