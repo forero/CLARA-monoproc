@@ -247,7 +247,7 @@ void RND_lyman_perp_vel(double *u_1, double *u_2)
 
 
 
-void RND_lyman_atom(double *DirPhotonX, double *DirPhotonY, double *DirPhotonZ, 
+void RND_lyman_atom(double *v_parallel, double *v_perp_1, double *v_perp_2, double *DirPhotonX, double *DirPhotonY, double *DirPhotonZ, 
 		    double *x, double a, double g_recoil, int n_points)
 /* obtains a random velocity for the atom. the velocity is in units of the thermal velocity.*/
 {
@@ -272,10 +272,9 @@ void RND_lyman_atom(double *DirPhotonX, double *DirPhotonY, double *DirPhotonZ,
       k_in_photon[2] = DirPhotonZ[i_photon];
 
       /*get first the parallel velocity*/
-      LocalVel[2] = RND_lyman_parallel_vel(x[i_photon],a);
-      
-      /*get the perpendicular velocity*/
-      RND_lyman_perp_vel(&(LocalVel[0]), &(LocalVel[1]));
+      LocalVel[2] = v_parallel[i_photon];
+      LocalVel[1] = v_perp_2[i_photon];
+      LocalVel[0] = v_perp_1[i_photon];
       
       /*get the axis in the coordinate system of the atom, where 
 	the z direction is the propagation direction of the photon*/

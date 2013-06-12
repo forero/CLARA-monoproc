@@ -90,7 +90,7 @@ void PropagateAllSetup(void)
 
 }
 
-int PropagateStep(double *x_in, double *x_out, double *k_in_x, double *k_in_y, double *k_in_z, double *r_travel, int *status, double a, double n_HI, int n_points) 
+int PropagateStep(double *v_parallel, double *v_perp_1, double *v_perp_2, double *x_in, double *x_out, double *k_in_x, double *k_in_y, double *k_in_z, double *r_travel, int *status, double a, double n_HI, int n_points) 
 /* Calculates: 
    1. new frequency 
    2. new propagation direction, 
@@ -122,7 +122,7 @@ int PropagateStep(double *x_in, double *x_out, double *k_in_x, double *k_in_y, d
     g_recoil = PLANCK*nu_doppler/(2.0*BOLTZMANN*temperature);
 
     /* generates the atom velocity the comoving frame*/
-    RND_lyman_atom(k_in_x, k_in_y, k_in_z, x_out, a, g_recoil, n_points);
+    RND_lyman_atom(v_parallel, v_perp_1, v_perp_2, k_in_x, k_in_y, k_in_z, x_out, a, g_recoil, n_points);
     
     for(i_photon=0;i_photon<n_points;i_photon++){
       if(status[i_photon]==ACTIVE){
@@ -232,6 +232,10 @@ int PropagatePackage(double *PosX, double *PosY, double *PosZ,
     double *x_aux_in;
     double *x_aux_out;
     double *r_travel_aux;
+    double *v_parallel;
+    double *v_perp_1;
+    double *v_perp_2;
+
     n_iter=0;
     n_global_scatt=0;
 
@@ -251,6 +255,23 @@ int PropagatePackage(double *PosX, double *PosY, double *PosZ,
       exit(1);
     }
 
+    if(!(v_parallel = malloc(sizeof(double) * n_points))){
+      fprintf(stderr, "Problem with r_travel_aux allocation\n");
+      exit(1);
+    }
+
+    if(!(v_perp_1 = malloc(sizeof(double) * n_points))){
+      fprintf(stderr, "Problem with r_travel_aux allocation\n");
+      exit(1);
+    }
+
+    if(!(v_perp_2 = malloc(sizeof(double) * n_points))){
+      fprintf(stderr, "Problem with r_travel_aux allocation\n");
+      exit(1);
+    }
+
+    
+
 
     /* count the number of active photons */
     n_active = count_active(status, n_points);
@@ -258,11 +279,39 @@ int PropagatePackage(double *PosX, double *PosY, double *PosZ,
     fprintf(stdout, "Active photons: %d", n_active);
     fflush(stdout);
 #endif
-
-
-
     /* difuse the photon in space and frequency until it gets out */
     while(n_active>0){
+
+    /*Get all the atom velocities -  This is the part to be updated with a kernel*/
+      for(i=0;i<n_points;i++){
+	Pos[0] = PosX[i];
+	Pos[1] = PosY[i];
+	Pos[2] = PosZ[i];
+	stat = status[i];
+	if(stat==ACTIVE){
+	  x_aux_in[i] = x_in[i];    
+	  x_aux_out[i] = x_in[i];    
+	}else{
+	  x_aux_in[i] = 0.0;
+	  x_aux_out[i] = 0.0;
+	}
+
+	/* get the temperature at this point*/
+	PropagateGetTemperature(&temperature, Pos);
+
+	/*Get the thermal velocity and doppler broadening*/
+	nu_doppler = CONSTANT_NU_DOPPLER*sqrt(temperature/10000.0); /* in cm/s */
+	a = Lya_nu_line_width_CGS/(2.0*nu_doppler);
+		
+	/*get first the parallel velocity*/
+	v_parallel[i] = RND_lyman_parallel_vel(x_aux_in[i],a);
+	
+	/*get the perpendicular velocity*/
+	RND_lyman_perp_vel(&(v_perp_1[i]), &(v_perp_2[i]));	
+      }
+      
+
+
 
       for(i=0;i<n_points;i++){
 	/*Make the initialization*/
@@ -316,7 +365,7 @@ int PropagatePackage(double *PosX, double *PosY, double *PosZ,
       v_thermal = (nu_doppler/Lya_nu_center_CGS)*C_LIGHT;/*In cm/s*/
 
       /*Change the frequency and the Propagation direction, find the displacement*/	
-      PropagateStep(x_aux_in, x_aux_out, DirX, DirY, DirZ, r_travel_aux, status, a, n_HI, n_points);	    	
+      PropagateStep(v_parallel, v_perp_1, v_perp_2, x_aux_in, x_aux_out, DirX, DirY, DirZ, r_travel_aux, status, a, n_HI, n_points);	    	
             
       for(i=0;i<n_points;i++){
 	Pos[0] = PosX[i];
@@ -381,6 +430,9 @@ int PropagatePackage(double *PosX, double *PosY, double *PosZ,
     free(x_aux_in);
     free(x_aux_out);
     free(r_travel_aux);
+    free(v_parallel);
+    free(v_perp_1);
+    free(v_perp_2);
     return 0;    
 }
 
