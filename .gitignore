@@ -1,2 +1,5 @@
 *.o
 *~
+*ascii
+*usedvalues
+*.x
