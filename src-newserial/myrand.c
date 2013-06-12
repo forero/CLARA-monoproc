@@ -6,7 +6,6 @@
 
 double RandFloatUnit(void){
     double ll;
-    int dat;
     ll = mts_ldrand(&RND_MT_State);   
     return ll;
 }

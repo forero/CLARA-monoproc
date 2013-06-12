@@ -10,15 +10,15 @@
 
 
 
-void RND_spherical(double *vec)
+void RND_spherical(double *vec_x, double *vec_y, double *vec_z)
 /*vector randomly distributed over the sphere*/
 {
     double theta, phi;
     theta = acos(2.0*(RandFloatUnit()-0.5));
     phi = 2.0*PI*RandFloatUnit();
-    vec[0] = sin(theta)*cos(phi);
-    vec[1] = sin(theta)*sin(phi);
-    vec[2] = cos(theta);
+    *vec_x = sin(theta)*cos(phi);
+    *vec_y = sin(theta)*sin(phi);
+    *vec_z = cos(theta);
 }
 
 void RND_pair(double *r_1, double *r_2){
@@ -249,12 +249,13 @@ void RND_lyman_perp_vel(double *u_1, double *u_2)
 
 
 
-void RND_lyman_atom(double *Vel, double *DirPhoton, 
-		    double *DirOutPhoton, double x, double a)
+void RND_lyman_atom(double *VelX, double *VelY, double *VelZ, 
+		    double *DirPhotonX, double *DirPhotonY, double *DirPhotonZ, 
+		    double *DirOutPhotonX, double *DirOutPhotonY, double *DirOutPhotonZ, 
+		    double x, double a)
 /* obtains a random velocity for the atom.
  the velocity is in units of the termal velocity.*/
 {
-    int i;
     double LocalVel[3];
     double x_axis[3];
     double y_axis[3];
@@ -272,12 +273,12 @@ void RND_lyman_atom(double *Vel, double *DirPhoton,
 
     /*get the axis in the coordinate system of the atom, where 
       the z direction is the propagation direction of the photon*/
-    for(i=0;i<3;i++){
-	z_axis[i] = DirPhoton[i];
-    }
+    z_axis[0] = *DirPhotonX;
+    z_axis[1] = *DirPhotonY;
+    z_axis[2] = *DirPhotonZ;
 
     /*get another random vector*/
-    RND_spherical(rand_axis);
+    RND_spherical(&(rand_axis[0]), &(rand_axis[1]), &(rand_axis[2]));
 
     /*make the cross product and get y_axis*/
     cross_product(z_axis, rand_axis, y_axis);
@@ -300,9 +301,15 @@ void RND_lyman_atom(double *Vel, double *DirPhoton,
     }
 
     /*Now make the transformation into the coordinate frame of the lab*/
+    *VelX = LocalVel[0]*x_axis[0] + LocalVel[1]*y_axis[0] + LocalVel[2]*z_axis[0];
+    *VelY = LocalVel[0]*x_axis[1] + LocalVel[1]*y_axis[1] + LocalVel[2]*z_axis[1];
+    *VelZ = LocalVel[0]*x_axis[2] + LocalVel[1]*y_axis[2] + LocalVel[2]*z_axis[2];
+
+    /*
     for(i=0;i<3;i++){
 	Vel[i] = LocalVel[0]*x_axis[i] + LocalVel[1]*y_axis[i] + LocalVel[2]*z_axis[i];
     }
+    */
 
     /*now get the outgoing direction of the photon, 
       taking advantage of the vector basis I have just generated
@@ -334,11 +341,18 @@ void RND_lyman_atom(double *Vel, double *DirPhoton,
     
     RND_pair(&R_1, &R_2);    
     R_3 = R_1*R_1 + R_2*R_2;
-    for(i=0;i<3;i++){
-	DirOutPhoton[i] = 
-	    sqrt((1.0-(mu*mu))/R_3)*R_1*x_axis[i] + 
-	    sqrt((1.0-(mu*mu))/R_3)*R_2*y_axis[i] + 
-	    mu*z_axis[i];
-    }
+
+    *DirOutPhotonX = 
+      sqrt((1.0-(mu*mu))/R_3)*R_1*x_axis[0] + 
+      sqrt((1.0-(mu*mu))/R_3)*R_2*y_axis[0] + 
+      mu*z_axis[0];
+    *DirOutPhotonY = 
+      sqrt((1.0-(mu*mu))/R_3)*R_1*x_axis[1] + 
+      sqrt((1.0-(mu*mu))/R_3)*R_2*y_axis[1] + 
+      mu*z_axis[1];
+    *DirOutPhotonZ = 
+      sqrt((1.0-(mu*mu))/R_3)*R_1*x_axis[2] + 
+      sqrt((1.0-(mu*mu))/R_3)*R_2*y_axis[2] + 
+      mu*z_axis[2];
 
 }

@@ -10,8 +10,12 @@
 void PhotonFree(lyman_RT_photons *Ph){
 
   free(Ph->x_out);Ph->x_out=NULL;
-  free(Ph->Dir);Ph->Dir=NULL;
-  free(Ph->Pos);Ph->Pos=NULL;
+  free(Ph->DirX);Ph->DirX=NULL;
+  free(Ph->DirY);Ph->DirY=NULL;
+  free(Ph->DirZ);Ph->DirZ=NULL;
+  free(Ph->PosX);Ph->PosX=NULL;
+  free(Ph->PosY);Ph->PosY=NULL;
+  free(Ph->PosZ);Ph->PosZ=NULL;
   free(Ph->Intensity);Ph->Intensity=NULL;
   free(Ph->Cell);Ph->Cell=NULL;
   free(Ph->Active);Ph->Active=NULL;
@@ -27,33 +31,36 @@ void PhotonListInitialize(lyman_RT_photons *Ph){
     double theta, phi;
 
     for(i=0;i<Ph->N_photons;i++){
-	RND_spherical(&(Ph->Dir[3*i]));
-	Ph->Pos[3*i + 0] = 0.0;
-	Ph->Pos[3*i + 1] = 0.0;
-	Ph->Pos[3*i + 2] = 0.0;
+      RND_spherical(&(Ph->DirX[i]),
+		    &(Ph->DirY[i]),
+		    &(Ph->DirZ[i]));
+
+	Ph->PosX[i] = 0.0;
+	Ph->PosY[i] = 0.0;
+	Ph->PosZ[i] = 0.0;
 
 	if(All.HomogeneousInit){
 	  if(All.NeufeldCube){
-	    Ph->Pos[3*i + 0] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
-	    Ph->Pos[3*i + 1] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
-	    Ph->Pos[3*i + 2] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
+	    Ph->PosX[i] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
+	    Ph->PosY[i] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
+	    Ph->PosZ[i] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
 	  }
 	  
 	  if(All.ExpandingSphere){
-	    Ph->Pos[3*i + 0] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
-	    Ph->Pos[3*i + 1] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
-	    Ph->Pos[3*i + 2] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
+	    Ph->PosX[i] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
+	    Ph->PosY[i] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
+	    Ph->PosZ[i] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
 	    do{
-	      Ph->Pos[3*i + 0] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
-	      Ph->Pos[3*i + 1] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
-	      Ph->Pos[3*i + 2] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
-	    }while(PropagateIsInside(&(Ph->Pos[3*i]))==0);	    
+	      Ph->PosX[i] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
+	      Ph->PosY[i] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
+	      Ph->PosZ[i] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
+	    }while(PropagateIsInside(Ph->PosX[i], Ph->PosY[i], Ph->PosZ[i])==0);	    
 	  }	  
 
 	  if(All.NeufeldSlab){
-	    Ph->Pos[3*i + 0] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
-	    Ph->Pos[3*i + 1] = 0.0;
-	    Ph->Pos[3*i + 2] = 0.0;
+	    Ph->PosX[i] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
+	    Ph->PosY[i] = 0.0;
+	    Ph->PosZ[i] = 0.0;
 	  }
 	}
     }
@@ -62,12 +69,12 @@ void PhotonListInitialize(lyman_RT_photons *Ph){
 	for(i=0;i<Ph->N_photons;i++){
 	    theta = acos(RandFloatUnit());
 	    phi = 2.0*PI*RandFloatUnit();
-	    Ph->Dir[3*i + 0] = sin(theta)*cos(phi);
-	    Ph->Dir[3*i + 1] = sin(theta)*sin(phi);
-	    Ph->Dir[3*i + 2] = cos(theta);
-	    Ph->Pos[3*i + 0] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
-	    Ph->Pos[3*i + 1] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
-	    Ph->Pos[3*i + 2] = All.SlabLength/All.Tau;
+	    Ph->DirX[i] = sin(theta)*cos(phi);
+	    Ph->DirY[i] = sin(theta)*sin(phi);
+	    Ph->DirZ[i] = cos(theta);
+	    Ph->PosX[i] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
+	    Ph->PosY[i] = 2.0*(RandFloatUnit()-0.5)*All.SlabLength;
+	    Ph->PosZ[i] = All.SlabLength/All.Tau;
 	}
     }
 
@@ -90,11 +97,27 @@ lyman_RT_photons * PhotonListCreate(int N_packages){
     fprintf(stderr, "Problem in creation of PhotontList (x_out)\n");
     exit(0);
   }
-  if(!(Ph->Dir = malloc(3*N_packages*sizeof(double)))){
+  if(!(Ph->DirX = malloc(N_packages*sizeof(double)))){
     fprintf(stderr, "Problem in creation of PhotontList (Dir)\n");
     exit(0);
   }
-  if(!(Ph->Pos = malloc(3*N_packages*sizeof(double)))){
+  if(!(Ph->DirY = malloc(N_packages*sizeof(double)))){
+    fprintf(stderr, "Problem in creation of PhotontList (Dir)\n");
+    exit(0);
+  }
+  if(!(Ph->DirZ = malloc(N_packages*sizeof(double)))){
+    fprintf(stderr, "Problem in creation of PhotontList (Dir)\n");
+    exit(0);
+  }
+  if(!(Ph->PosX = malloc(N_packages*sizeof(double)))){
+    fprintf(stderr, "Problem in creation of PhotontList (Pos)\n");
+    exit(0);
+  }
+  if(!(Ph->PosY = malloc(N_packages*sizeof(double)))){
+    fprintf(stderr, "Problem in creation of PhotontList (Pos)\n");
+    exit(0);
+  }
+  if(!(Ph->PosZ = malloc(N_packages*sizeof(double)))){
     fprintf(stderr, "Problem in creation of PhotontList (Pos)\n");
     exit(0);
   }
@@ -145,12 +168,12 @@ lyman_RT_photons * PhotonListCreate(int N_packages){
       Ph->ScatterHI[i] = 0;
       Ph->ScatterDust[i] = 0;
       Ph->Wrong[i]     = 0;
-      Ph->Dir[3*i + 0]     = 0.0;
-      Ph->Dir[3*i + 1]     = 0.0;
-      Ph->Dir[3*i + 2]     = 0.0;
-      Ph->Pos[3*i + 0]     = 0.0;
-      Ph->Pos[3*i + 1]     = 0.0;
-      Ph->Pos[3*i + 2]     = 0.0;
+      Ph->DirX[i]     = 0.0;
+      Ph->DirY[i]     = 0.0;
+      Ph->DirZ[i]     = 0.0;
+      Ph->PosX[i]     = 0.0;
+      Ph->PosY[i]     = 0.0;
+      Ph->PosZ[i]     = 0.0;
       Ph->Intensity[i] = 1.0;
   }
 

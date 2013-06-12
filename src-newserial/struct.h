@@ -132,8 +132,12 @@ typedef struct lyman_RT_photons_str
   /*geometrical and physical properties*/
   int     *Cell;    /* marks the [i,j,k] where the cube is (it's a 3D array)*/  
   double   *x_out;    /* output frequency */
-  double   *Pos;     /* marks the position*/
-  double   *Dir;     /* last recorded direction of movement along x (it's a 3D array)*/
+  double   *PosX;     /* marks the position*/
+  double   *PosY;     /* marks the position*/
+  double   *PosZ;     /* marks the position*/
+  double   *DirX;     /* last recorded direction of movement along x*/
+  double   *DirY;     /* last recorded direction of movement along y*/
+  double   *DirZ;     /* last recorded direction of movement along z*/
   double   *Intensity; /* Gives a weight to the intensity by dust absorption*/
   
   /*Boookkeeping data*/

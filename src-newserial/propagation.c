@@ -11,7 +11,7 @@
 #include "io.h"
 #include "myrand.h"
 
-int PropagateIsInside(double *Pos)
+int PropagateIsInside(double PosX, double PosY, double PosZ)
 /*depending on the geometrical consideration of the problem at hand,
   decides if the photon is still inside*/
 {
@@ -20,9 +20,9 @@ int PropagateIsInside(double *Pos)
     is_in = 1;
 
     if(All.SimulationCube){
-	if(fabs(Pos[0])<All.SlabLength && 
-	   fabs(Pos[1])<All.SlabLength &&
-	   Pos[2] < (All.SlabLength*2.0) && Pos[2]>0.0){
+	if(fabs(PosX)<All.SlabLength && 
+	   fabs(PosY)<All.SlabLength &&
+	   PosZ < (All.SlabLength*2.0) && PosZ>0.0){
 	    is_in = 1;
 	}else{
 	    is_in = 0 ;
@@ -30,7 +30,7 @@ int PropagateIsInside(double *Pos)
     }
 
     if(All.NeufeldSlab){
-	if(fabs(Pos[0])<All.SlabLength){
+	if(fabs(PosX)<All.SlabLength){
 	    is_in = 1;
 	}else{
 	    is_in = 0 ;
@@ -38,9 +38,9 @@ int PropagateIsInside(double *Pos)
     }
 
     if(All.NeufeldCube){
-	if(fabs(Pos[0])<All.SlabLength && 
-	   fabs(Pos[1])<All.SlabLength &&
-	   fabs(Pos[2])<All.SlabLength){
+	if(fabs(PosX)<All.SlabLength && 
+	   fabs(PosY)<All.SlabLength &&
+	   fabs(PosZ)<All.SlabLength){
 	    is_in = 1;
 	}else{
 	    is_in = 0 ;
@@ -48,7 +48,7 @@ int PropagateIsInside(double *Pos)
     }
 
     if(All.ExpandingSphere){
-	radius = Pos[0]*Pos[0] + Pos[1]*Pos[1] + Pos[2]*Pos[2];
+	radius = PosX*PosX + PosY*PosY + PosZ*PosZ;
 	radius = sqrt(radius);
 	if(radius< All.SlabLength){
 	    is_in = 1;
@@ -116,15 +116,11 @@ int PropagateStep(double *x, double *k_in_photon, double *r_travel, double a, do
     double dust_sigma;
     double rand_interaction;
     double rand_absorption;
-    double v_parallel;;
     double nu_doppler;
-    double v_thermal;
     double g_recoil;
     double temperature;
-    
 
     nu_doppler = Lya_nu_line_width_CGS/(2.0*a);
-    v_thermal = (nu_doppler/Lya_nu_center_CGS)*C_LIGHT;/*In cm/s*/
     temperature = (nu_doppler/CONSTANT_NU_DOPPLER)*(nu_doppler/CONSTANT_NU_DOPPLER)*10000.0;
     HIInteractionProb = 1.0;
     rand_absorption = 0.0;
@@ -162,8 +158,10 @@ int PropagateStep(double *x, double *k_in_photon, double *r_travel, double a, do
     if(rand_interaction <= HIInteractionProb){
 
 	/* generate the atom velocity the comoving frame*/
-	RND_lyman_atom(&(u_atom[0]), &(k_in_photon[0]), 
-		       &(k_out_photon[0]), x_in, a_in);
+	RND_lyman_atom(&(u_atom[0]), &(u_atom[1]), &(u_atom[2]), 
+		       &(k_in_photon[0]), &(k_in_photon[1]), &(k_in_photon[2]), 
+		       &(k_out_photon[0]), &(k_out_photon[1]), &(k_out_photon[2]),
+		       x_in, a_in);
 
 
 	/*find the new frequency (in the observer system)*/
@@ -231,7 +229,9 @@ void PropagateLorentzFreqChange(double *x, double *Dir,
     *x  = *x + sign*lorentz_factor;
 }
 
-int PropagatePackage(double *PosIn, double *DirIn, double *x_in, int *status){
+int PropagatePackage(double *PosX, double *PosY, double *PosZ, 
+		     double *DirX, double *DirY, double *DirZ, 
+		     double *x_in, int *status){
     int i;
     double Pos[3];
     double Dir[3];
@@ -243,17 +243,20 @@ int PropagatePackage(double *PosIn, double *DirIn, double *x_in, int *status){
     n_iter=0;
 
     /*Make the initialization*/
-    for(i=0;i<3;i++){
-	Pos[i] = PosIn[i];
-	Dir[i] = DirIn[i];
-    }
+    Pos[0] = PosX[0];
+    Pos[1] = PosY[0];
+    Pos[2] = PosZ[0];
+    Dir[0] = DirX[0];
+    Dir[1] = DirY[0];
+    Dir[2] = DirZ[0];
+
     x = *x_in;
     
 
 
     stat = *status;
     /*difuse the photon in space and frequency until it gets out*/
-    while(PropagateIsInside(&(Pos[0]))&&(stat==ACTIVE)&&n_iter<MAX_ITER){
+    while(PropagateIsInside(Pos[0],Pos[1],Pos[2])&&(stat==ACTIVE)&&n_iter<MAX_ITER){
       /* get the temperature at this point*/
       PropagateGetTemperature(&temperature, Pos);
       
@@ -291,7 +294,7 @@ int PropagatePackage(double *PosIn, double *DirIn, double *x_in, int *status){
       for(i=0;i<3;i++){
 	Pos[i] += r_travel*Dir[i];	    
       }
-      
+
       n_iter++;
       last_x = x;
     }
@@ -305,11 +308,13 @@ int PropagatePackage(double *PosIn, double *DirIn, double *x_in, int *status){
     }
     
     /*Update the final values*/
-    for(i=0;i<3;i++){
-	PosIn[i] = Pos[i];
-	DirIn[i] = Dir[i];
-    }
-
+    PosX[0] = Pos[0];
+    PosY[0] = Pos[1];
+    PosZ[0] = Pos[2];
+    DirX[0] = Dir[0];
+    DirY[0] = Dir[1];
+    DirZ[0] = Dir[2];
+	
     *x_in = x;
     *status = stat;
     return n_iter;
@@ -352,10 +357,14 @@ void PropagateAll(void)
     /*propagate each package*/
     for(i=0;i<n_packages;i++){
 	Ph->ScatterHI[i] = 
-	    PropagatePackage(&(Ph->Pos[3*i]), &(Ph->Dir[3*i]), &(Ph->x_out[i]), &(Ph->Active[i]));	
+	  PropagatePackage(&(Ph->PosX[i]), &(Ph->PosY[i]), &(Ph->PosZ[i]),
+			   &(Ph->DirX[i]), &(Ph->DirY[i]), &(Ph->DirZ[i]),
+			   &(Ph->x_out[i]), &(Ph->Active[i]));	
+	fprintf(stdout, "Done package %d\n", i);
+
 	if(All.OutputFinalList){
-	    sprintf(FileName, "%s/%s_out.proc.%d.ascii", All.OutputDir, All.OutputFile, ThisProc);
-	    AppendPhotonListAscii(FileName, Ph, i);    
+	  sprintf(FileName, "%s/%s_out.proc.%d.ascii", All.OutputDir, All.OutputFile, ThisProc);
+	  AppendPhotonListAscii(FileName, Ph, i);    
 	}    
     }
     fprintf(stdout, "finished writing (prc %d)\n", ThisProc);
@@ -387,7 +396,7 @@ void TestFirstScatter(double x, double a)
     for(i=0;i<N_POINTS_IN_TEST;i++){
 	x_in = x;
 	n_HI = All.NumberDensityHI;
-	RND_spherical(&(k_in_photon[0]));    
+	RND_spherical(&(k_in_photon[0]), &(k_in_photon[1]), &(k_in_photon[2]));    
 	status = PropagateStep(&x_in, &(k_in_photon[0]), &r_travel, a, n_HI);
 	fprintf(out, "%e\n", x_in);
     }
