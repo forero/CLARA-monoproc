@@ -63,24 +63,29 @@ int PropagateIsInside(double *Pos)
 void PropagateAllSetup(void)
 /*makes the general problem setup from the input values*/
 {
-    double a, nu_doppler, ly_sigma_0, column_HI;
-    
-    nu_doppler = CONSTANT_NU_DOPPLER*sqrt(All.Temperature/10000.0); /* in s^-1 */
-    a = Lya_nu_line_width_CGS/(2.0*nu_doppler);
-    ly_sigma_0 =  LyaCrossSection(0,a);
+  double a, nu_doppler, ly_sigma_0, column_HI, v_thermal, ly_sigma_v, x_new;
+  
+  nu_doppler = CONSTANT_NU_DOPPLER*sqrt(All.Temperature/10000.0); /* in s^-1 */
+  a = Lya_nu_line_width_CGS/(2.0*nu_doppler);
+  ly_sigma_0 =  LyaCrossSection(0,a);
+  
+  v_thermal = (nu_doppler/Lya_nu_center_CGS)*C_LIGHT;/*In cm/s*/
+  x_new = 200.0*1.0E5/v_thermal;
+  ly_sigma_v = LyaCrossSection(x_new,a);
 
-
-    column_HI = All.Tau / ly_sigma_0;
-    All.SlabLength = All.Tau/(All.NumberDensityHI*ly_sigma_0);
-    
+  column_HI = All.Tau / ly_sigma_0;
+  All.SlabLength = All.Tau/(All.NumberDensityHI*ly_sigma_0);
+  
 #ifdef DEBUG
-    fprintf(stdout, "ColumnDensinty %e\n", column_HI);
-    fprintf(stdout, "Temp %g\n", All.Temperature);
-    fprintf(stdout, "a %g\n", a);
-    fprintf(stdout, "ly_sigma_0 %g\n", ly_sigma_0);
-    fprintf(stdout, "Slab Length [cm] %g\n", All.SlabLength);
-    fprintf(stdout, "maximum at (a*tau)^1/3 %g\n", pow(a*All.Tau,0.333));
-    fprintf(stdout, "scatterings %g\n", 1.612*All.Tau);
+  fprintf(stdout, "cross section for delta_v=200km/s %e\n", ly_sigma_v);
+  fprintf(stdout, "cross section %e\n", ly_sigma_0);
+  fprintf(stdout, "ColumnDensinty %e\n", column_HI);
+  fprintf(stdout, "Temp %g\n", All.Temperature);
+  fprintf(stdout, "a %g\n", a);
+  fprintf(stdout, "ly_sigma_0 %g\n", ly_sigma_0);
+  fprintf(stdout, "Slab Length [cm] %g\n", All.SlabLength);
+  fprintf(stdout, "maximum at (a*tau)^1/3 %g\n", pow(a*All.Tau,0.333));
+  fprintf(stdout, "scatterings %g\n", 1.612*All.Tau);
 #endif
 
 }
